@@ -1,0 +1,163 @@
+version: "3.9"
+
+
+services:
+
+
+  mysql:
+    build:
+      context: mysql
+    container_name: mysql
+    image: geo1796/mysqldb
+    command: --default-authentication-plugin=mysql_native_password
+    environment:
+      MYSQL_ROOT_PASSWORD: rootroot
+    healthcheck:
+      test: [ "CMD", "mysqladmin" ,"ping", "-h", "localhost" ]
+      timeout: 20s
+      retries: 10
+    ports:
+      - "3306:3306"
+    volumes:
+      - test_mysql_data_container:/var/lib/mysql
+    networks:
+      - my_network
+
+
+  config-server:
+    build:
+      context: config-server
+    container_name: config-server
+    image: geo1796/config-server
+    healthcheck:
+      test: curl -f http://localhost:9101/gateway/default || exit 1
+      timeout: 20s
+      retries: 10
+    ports:
+      - "9101:9101"
+    networks:
+      - my_network
+
+
+  eureka:
+    build:
+      context: eureka
+    container_name: eureka
+    image: geo1796/eureka
+    healthcheck:
+      test: curl -f http://localhost:9102/actuator || exit 1
+      timeout: 20s
+      retries: 10
+    environment:
+      - "SPRING_PROFILES_ACTIVE=docker"
+    ports:
+      - "9102:9102"
+    depends_on:
+      config-server:
+        condition: service_healthy
+    networks:
+      - my_network
+
+
+  auth:
+    build:
+      context: auth
+    container_name: auth
+    image: geo1796/auth
+    healthcheck:
+      test: curl -f http://localhost:8080/healthCheck || exit 1
+      timeout: 20s
+      retries: 10
+    environment:
+      - "SPRING_PROFILES_ACTIVE=docker"
+    ports:
+      - "8080:8080"
+    depends_on:
+      config-server:
+        condition: service_healthy
+      eureka:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+    networks:
+      - my_network
+
+
+  demo:
+    build:
+      context: demo
+    container_name: demo
+    image: geo1796/demo
+    healthcheck:
+      test: curl -f http://localhost:8081/healthCheck || exit 1
+      timeout: 20s
+      retries: 10
+    environment:
+      - "SPRING_PROFILES_ACTIVE=docker"
+    ports:
+      - "8081:8081"
+    depends_on:
+      config-server:
+        condition: service_healthy
+      eureka:
+        condition: service_healthy
+      auth:
+        condition: service_healthy
+    networks:
+      - my_network
+
+  demo2:
+    build:
+      context: demo2
+    container_name: demo2
+    image: geo1796/demo2
+    healthcheck:
+      test: curl -f http://localhost:8082/healthCheck || exit 1
+      timeout: 20s
+      retries: 10
+    environment:
+      - "SPRING_PROFILES_ACTIVE=docker"
+    ports:
+      - "8082:8082"
+    depends_on:
+      config-server:
+        condition: service_healthy
+      eureka:
+        condition: service_healthy
+      auth:
+        condition: service_healthy
+      demo:
+        condition: service_healthy
+    networks:
+      - my_network
+
+
+  gateway:
+    build:
+      context: gateway
+    container_name: gateway
+    image: geo1796/gateway
+    environment:
+      - "SPRING_PROFILES_ACTIVE=docker"
+    ports:
+      - "8760:8760"
+    depends_on:
+      config-server:
+        condition: service_healthy
+      eureka:
+        condition: service_healthy
+      auth:
+        condition: service_healthy
+      demo2:
+        condition: service_healthy
+      demo:
+        condition: service_healthy
+    networks:
+      - my_network
+
+volumes:
+  test_mysql_data_container:
+
+networks:
+  my_network:
+    driver: bridge
